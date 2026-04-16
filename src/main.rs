@@ -4,6 +4,7 @@ use std::rc::Rc;
 
 use chrono::{Datelike, Local, NaiveDate};
 use gtk4::gdk;
+use gtk4::gio;
 use gtk4::glib;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
@@ -143,15 +144,55 @@ fn main() -> glib::ExitCode {
     app.run()
 }
 
+fn theme_css_path() -> Option<PathBuf> {
+    let home = std::env::var_os("HOME")?;
+    let path = PathBuf::from(home)
+        .join(".config/omarchy/current/theme/waycal.css");
+    if path.is_file() { Some(path) } else { None }
+}
+
 fn load_css() {
+    let display = match gdk::Display::default() {
+        Some(d) => d,
+        None => return,
+    };
+
     let provider = gtk4::CssProvider::new();
-    provider.load_from_string(CSS);
-    if let Some(display) = gdk::Display::default() {
-        gtk4::style_context_add_provider_for_display(
-            &display,
-            &provider,
-            gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
-        );
+    apply_css(&provider);
+    gtk4::style_context_add_provider_for_display(
+        &display,
+        &provider,
+        gtk4::STYLE_PROVIDER_PRIORITY_USER,
+    );
+
+    // Watch ~/.config/omarchy/current/ for directory changes (instant theme updates)
+    let home = std::env::var_os("HOME");
+    if let Some(home) = home {
+        let watch_dir = PathBuf::from(home).join(".config/omarchy/current");
+        if watch_dir.is_dir() {
+            let file = gio::File::for_path(&watch_dir);
+            if let Ok(monitor) = file.monitor_directory(gio::FileMonitorFlags::WATCH_MOVES, gio::Cancellable::NONE) {
+                let p = provider.clone();
+                monitor.connect_changed(move |_, _, _, _| {
+                    apply_css(&p);
+                });
+                std::mem::forget(monitor);
+            }
+        }
+    }
+
+    // Also reload CSS on SIGUSR1 as a fallback
+    glib::unix_signal_add_local(10 /* SIGUSR1 */, move || {
+        apply_css(&provider);
+        glib::ControlFlow::Continue
+    });
+}
+
+fn apply_css(provider: &gtk4::CssProvider) {
+    if let Some(path) = theme_css_path() {
+        provider.load_from_path(&path);
+    } else {
+        provider.load_from_string(CSS);
     }
 }
 

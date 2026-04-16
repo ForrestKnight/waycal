@@ -17,7 +17,8 @@ Written in Rust with GTK4 and `gtk4-layer-shell` so the popup anchors itself to 
 - **Two looks:** press `s` to swap between a sharp-cornered, bordered "Omarchy" style and a soft rounded style. Your choice is remembered between launches
 - **Toggle-click:** clicking the Waybar icon while the popup is open closes it
 - **Anchored** just below the bar, horizontally centered, no config file hacks
-- **Dark theme** with a sage-green accent, monospace font. Self-contained CSS — no theme integration or external dependencies to worry about.
+- **Dark theme** with a sage-green accent, monospace font. Self-contained CSS that works out of the box.
+- **Omarchy theme support:** automatically picks up your Omarchy theme colors when a `waycal.css` is present (see [Omarchy theming](#omarchy-theming) below)
 
 ## Requirements
 
@@ -115,6 +116,31 @@ Restart Waybar (`pkill -x waybar && setsid waybar &`) and click the icon.
 | `Esc`        | Close the popup                            |
 
 Clicking the Waybar icon a second time also closes the popup (the `pkill -x waycal || waycal` command toggles).
+
+## Omarchy theming
+
+waycal looks great out of the box, but if you run [Omarchy](https://github.com/nicholasgasior/omarchy) and want the calendar to follow your theme, you can wire it up with a single template file.
+
+waycal checks for `~/.config/omarchy/current/theme/waycal.css` on startup. If that file exists it is used instead of the built-in CSS. waycal also reloads its CSS on `SIGUSR1`, so theme switches can update colors live without restarting.
+
+**Setup (two steps):**
+
+1. Copy the included template to your Omarchy user templates directory:
+
+```sh
+cp waycal.css.tpl ~/.config/omarchy/themed/
+```
+
+2. Create a theme-set hook so waycal reloads when you switch themes. Save this as `~/.config/omarchy/hooks/theme-set` (remove the `.sample` suffix if one exists):
+
+```sh
+#!/bin/bash
+pkill -USR1 -x waycal
+```
+
+Make it executable: `chmod +x ~/.config/omarchy/hooks/theme-set`
+
+Then switch themes once (`omarchy-theme-set <theme>`) to generate the CSS file. From then on, every theme switch updates waycal live — colors change instantly if waycal is open.
 
 ## Why not just use the Waybar clock tooltip?
 
