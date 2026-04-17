@@ -92,10 +92,8 @@ fn main() -> glib::ExitCode {
 }
 
 fn load_css() {
-    let palette = theme::Palette::from_omarchy();
-    let css = theme::build_css(&palette);
     let provider = gtk4::CssProvider::new();
-    provider.load_from_string(&css);
+    provider.load_from_string(&theme::build_css(&theme::Palette::from_omarchy()));
     if let Some(display) = gdk::Display::default() {
         gtk4::style_context_add_provider_for_display(
             &display,
@@ -103,6 +101,7 @@ fn load_css() {
             gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
     }
+    theme::watch_and_reload(provider);
 }
 
 fn build_ui(app: &gtk4::Application) {

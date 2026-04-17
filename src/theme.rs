@@ -1,5 +1,9 @@
 use std::path::PathBuf;
 
+use gtk4::CssProvider;
+use gtk4::gio;
+use gtk4::prelude::*;
+
 pub struct Palette {
     pub background: String,
     pub background_rgba: String,
@@ -135,6 +139,30 @@ window.waycal {{
 fn omarchy_colors_path() -> Option<PathBuf> {
     let home = std::env::var_os("HOME")?;
     Some(PathBuf::from(home).join(".config/omarchy/current/theme/colors.toml"))
+}
+
+fn omarchy_theme_name_path() -> Option<PathBuf> {
+    let home = std::env::var_os("HOME")?;
+    Some(PathBuf::from(home).join(".config/omarchy/current/theme.name"))
+}
+
+pub fn watch_and_reload(provider: CssProvider) {
+    let Some(path) = omarchy_theme_name_path() else {
+        return;
+    };
+    let file = gio::File::for_path(&path);
+    let Ok(monitor) = file.monitor_file(gio::FileMonitorFlags::NONE, gio::Cancellable::NONE) else {
+        return;
+    };
+    monitor.connect_changed(move |_, _, _, event| {
+        if matches!(
+            event,
+            gio::FileMonitorEvent::ChangesDoneHint | gio::FileMonitorEvent::Created
+        ) {
+            provider.load_from_string(&build_css(&Palette::from_omarchy()));
+        }
+    });
+    Box::leak(Box::new(monitor));
 }
 
 fn parse_toml_string(line: &str) -> Option<(&str, String)> {
