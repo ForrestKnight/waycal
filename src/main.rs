@@ -169,6 +169,7 @@ fn build_ui(app: &gtk4::Application) {
     window.add_css_class("waycal");
 
     window.init_layer_shell();
+    window.set_namespace(Some("waycal"));
     window.set_layer(Layer::Top);
     window.set_keyboard_mode(KeyboardMode::OnDemand);
     window.set_anchor(Edge::Top, true);
