@@ -9,6 +9,7 @@ use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 
 const APP_ID: &str = "com.forrestknight.waycal";
+const AUTO_CLOSE_SECS: u32 = 3;
 
 const CSS: &str = r#"
 window.waycal {
@@ -230,6 +231,67 @@ fn build_ui(app: &gtk4::Application) {
         });
     }
     window.add_controller(key);
+
+    let auto_close: Rc<RefCell<Option<glib::SourceId>>> = Rc::new(RefCell::new(None));
+
+    let focus = gtk4::EventControllerFocus::new();
+    {
+        let window = window.clone();
+        let auto_close = auto_close.clone();
+        focus.connect_leave(move |_| {
+            // Cancel any previous pending timer before scheduling a new one.
+            if let Some(id) = auto_close.borrow_mut().take() {
+                id.remove();
+            }
+            // Don't schedule if the window is already closing.
+            if !window.is_visible() {
+                return;
+            }
+            let window_inner = window.clone();
+            let auto_close_inner = auto_close.clone();
+            let id = glib::timeout_add_seconds_local(AUTO_CLOSE_SECS, move || {
+                *auto_close_inner.borrow_mut() = None;
+                window_inner.close();
+                glib::ControlFlow::Break
+            });
+            *auto_close.borrow_mut() = Some(id);
+        });
+    }
+    {
+        let auto_close = auto_close.clone();
+        focus.connect_enter(move |_| {
+            if let Some(id) = auto_close.borrow_mut().take() {
+                id.remove();
+            }
+        });
+    }
+    window.add_controller(focus);
+
+    // Cancel any pending timer when the window is closed (ESC, click-away, etc.)
+    // so we never call close() on an already-destroyed window.
+    {
+        let auto_close = auto_close.clone();
+        window.connect_close_request(move |_| {
+            if let Some(id) = auto_close.borrow_mut().take() {
+                id.remove();
+            }
+            glib::Propagation::Proceed
+        });
+    }
+
+    // Fallback initial timer: with KeyboardMode::OnDemand, Hyprland does not grant
+    // keyboard focus automatically, so connect_leave may never fire. This ensures
+    // the window still closes if the user never interacts with it.
+    {
+        let window_inner = window.clone();
+        let auto_close_inner = auto_close.clone();
+        let id = glib::timeout_add_seconds_local(AUTO_CLOSE_SECS, move || {
+            *auto_close_inner.borrow_mut() = None;
+            window_inner.close();
+            glib::ControlFlow::Break
+        });
+        *auto_close.borrow_mut() = Some(id);
+    }
 
     window.present();
 }
