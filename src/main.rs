@@ -1,3 +1,5 @@
+mod theme;
+
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -9,60 +11,6 @@ use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 
 const APP_ID: &str = "com.forrestknight.waycal";
-
-const CSS: &str = r#"
-window.waycal {
-    background: transparent;
-}
-.waycal-root {
-    background-color: #1a2125;
-    border: 2px solid #8FBC8F;
-    border-radius: 0;
-    padding: 14px 18px;
-    color: #c9d1d9;
-    font-family: "CaskaydiaMono Nerd Font", monospace;
-    font-size: 13px;
-    min-width: 260px;
-}
-.waycal-root.rounded {
-    background-color: rgba(26, 33, 37, 0.96);
-    border: 2px solid transparent;
-    border-radius: 16px;
-}
-.waycal-header {
-    font-weight: bold;
-    font-size: 15px;
-    padding-bottom: 6px;
-}
-.waycal-weekday {
-    color: #8FBC8F;
-    font-weight: bold;
-    padding: 2px 6px;
-}
-.waycal-day {
-    padding: 4px 7px;
-    min-width: 18px;
-}
-.waycal-day.dim {
-    opacity: 0.3;
-}
-.waycal-day.today {
-    background-color: #8FBC8F;
-    color: #1a2125;
-    border-radius: 0;
-    font-weight: bold;
-}
-.waycal-root.rounded .waycal-day.today {
-    border-radius: 8px;
-}
-.waycal-footer {
-    color: #6a7a71;
-    font-size: 10px;
-    padding-top: 8px;
-    margin-top: 6px;
-    border-top: 1px solid rgba(143, 188, 143, 0.18);
-}
-"#;
 
 #[derive(Clone, Copy)]
 struct ViewDate {
@@ -145,7 +93,7 @@ fn main() -> glib::ExitCode {
 
 fn load_css() {
     let provider = gtk4::CssProvider::new();
-    provider.load_from_string(CSS);
+    provider.load_from_string(&theme::build_css(&theme::Palette::from_omarchy()));
     if let Some(display) = gdk::Display::default() {
         gtk4::style_context_add_provider_for_display(
             &display,
@@ -153,6 +101,7 @@ fn load_css() {
             gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
     }
+    theme::watch_and_reload(provider);
 }
 
 fn build_ui(app: &gtk4::Application) {
