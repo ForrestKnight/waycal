@@ -11,6 +11,9 @@ readme = "README.md"
 gtk4 = { version = "0.9", features = ["v4_12"] }
 gtk4-layer-shell = "0.5"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
+serde = { version = "1", features = ["derive"] }
+serde_yml = "0.0"
+dirs = "6"
 
 [profile.release]
 lto = true

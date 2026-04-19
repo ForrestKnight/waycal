@@ -7,6 +7,7 @@ use gtk4::gdk;
 use gtk4::glib;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
+use serde::Deserialize;
 
 const APP_ID: &str = "com.forrestknight.waycal";
 
@@ -118,6 +119,67 @@ fn save_rounded(rounded: bool) {
     }
 }
 
+#[derive(Deserialize)]
+struct Keymaps {
+    #[serde(default = "default_month_prev")]
+    month_prev: String,
+    #[serde(default = "default_month_next")]
+    month_next: String,
+    #[serde(default = "default_year_prev")]
+    year_prev: String,
+    #[serde(default = "default_year_next")]
+    year_next: String,
+    #[serde(default = "default_today")]
+    today: String,
+    #[serde(default = "default_style_toggle")]
+    style_toggle: String,
+    #[serde(default = "default_close")]
+    close: String,
+}
+
+fn default_month_prev() -> String { "Left".into() }
+fn default_month_next() -> String { "Right".into() }
+fn default_year_prev() -> String { "Up".into() }
+fn default_year_next() -> String { "Down".into() }
+fn default_today() -> String { "Return".into() }
+fn default_style_toggle() -> String { "s".into() }
+fn default_close() -> String { "Escape".into() }
+
+impl Default for Keymaps {
+    fn default() -> Self {
+        Self {
+            month_prev: default_month_prev(),
+            month_next: default_month_next(),
+            year_prev: default_year_prev(),
+            year_next: default_year_next(),
+            today: default_today(),
+            style_toggle: default_style_toggle(),
+            close: default_close(),
+        }
+    }
+}
+
+#[derive(Deserialize, Default)]
+struct Config {
+    #[serde(default)]
+    keymaps: Keymaps,
+}
+
+fn config_path() -> Option<PathBuf> {
+    Some(dirs::config_dir()?.join("waycal").join("config.yaml"))
+}
+
+fn load_config() -> Config {
+    config_path()
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .and_then(|s| serde_yml::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+fn parse_key(name: &str) -> Option<gdk::Key> {
+    gdk::Key::from_name(name)
+}
+
 fn month_name(m: u32) -> &'static str {
     match m {
         1 => "January",
@@ -176,7 +238,15 @@ fn build_ui(app: &gtk4::Application) {
     grid.set_column_spacing(2);
     grid.set_halign(gtk4::Align::Center);
 
-    let footer = gtk4::Label::new(Some("\u{2190}\u{2192} mo   \u{2191}\u{2193} yr   \u{23CE} today   s style"));
+    let config = load_config();
+    let km = &config.keymaps;
+
+    let footer_text = format!(
+        "{}/{} mo   {}/{} yr   {} today   {} style",
+        km.month_prev, km.month_next, km.year_prev, km.year_next,
+        km.today, km.style_toggle
+    );
+    let footer = gtk4::Label::new(Some(&footer_text));
     footer.add_css_class("waycal-footer");
     footer.set_halign(gtk4::Align::Center);
 
@@ -189,6 +259,13 @@ fn build_ui(app: &gtk4::Application) {
     root.append(&grid);
     root.append(&footer);
     window.set_child(Some(&root));
+    let key_month_prev = parse_key(&km.month_prev);
+    let key_month_next = parse_key(&km.month_next);
+    let key_year_prev = parse_key(&km.year_prev);
+    let key_year_next = parse_key(&km.year_next);
+    let key_today = parse_key(&km.today);
+    let key_style_toggle = parse_key(&km.style_toggle);
+    let key_close = parse_key(&km.close);
 
     let state = Rc::new(RefCell::new(ViewDate::today()));
     render(&grid, &header, *state.borrow());
@@ -203,16 +280,16 @@ fn build_ui(app: &gtk4::Application) {
         key.connect_key_pressed(move |_, keyval, _, _| {
             let current = *state.borrow();
             let next = match keyval {
-                gdk::Key::Left => current.shift_month(-1),
-                gdk::Key::Right => current.shift_month(1),
-                gdk::Key::Up => current.shift_year(-1),
-                gdk::Key::Down => current.shift_year(1),
-                gdk::Key::Return | gdk::Key::KP_Enter => ViewDate::today(),
-                gdk::Key::Escape => {
+                k if key_month_prev == Some(k) => current.shift_month(-1),
+                k if key_month_next == Some(k) => current.shift_month(1),
+                k if key_year_prev == Some(k) => current.shift_year(-1),
+                k if key_year_next == Some(k) => current.shift_year(1),
+                k if key_today == Some(k) => ViewDate::today(),
+                k if key_close == Some(k) => {
                     window.close();
                     return glib::Propagation::Stop;
                 }
-                gdk::Key::s | gdk::Key::S => {
+                k if key_style_toggle == Some(k) => {
                     let now_rounded = !root.has_css_class("rounded");
                     if now_rounded {
                         root.add_css_class("rounded");
