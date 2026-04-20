@@ -118,24 +118,6 @@ fn save_rounded(rounded: bool) {
     }
 }
 
-fn month_name(m: u32) -> &'static str {
-    match m {
-        1 => "January",
-        2 => "February",
-        3 => "March",
-        4 => "April",
-        5 => "May",
-        6 => "June",
-        7 => "July",
-        8 => "August",
-        9 => "September",
-        10 => "October",
-        11 => "November",
-        12 => "December",
-        _ => "",
-    }
-}
-
 fn main() -> glib::ExitCode {
     let app = gtk4::Application::builder().application_id(APP_ID).build();
     app.connect_startup(|_| load_css());
@@ -235,15 +217,22 @@ fn build_ui(app: &gtk4::Application) {
 }
 
 fn render(grid: &gtk4::Grid, header: &gtk4::Label, v: ViewDate) {
-    header.set_text(&format!("{} {}", month_name(v.month), v.year));
+    header.set_text(
+        &glib::DateTime::from_local(v.year, v.month as i32, 1, 12, 0, 0.0)
+            .and_then(|date| date.format("%B %Y"))
+            .expect("view date should be valid"),
+    );
 
     while let Some(child) = grid.first_child() {
         grid.remove(&child);
     }
 
-    let weekdays = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
-    for (i, name) in weekdays.iter().enumerate() {
-        let lbl = gtk4::Label::new(Some(name));
+    for i in 0..7 {
+        // 2024-01-01 was a Monday, matching the calendar's Monday-first layout.
+        let name = glib::DateTime::from_local(2024, 1, i + 1, 12, 0, 0.0)
+            .and_then(|date| date.format("%a"))
+            .expect("fixed weekday dates should be valid");
+        let lbl = gtk4::Label::new(Some(&name));
         lbl.add_css_class("waycal-weekday");
         grid.attach(&lbl, i as i32, 0, 1, 1);
     }
