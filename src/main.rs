@@ -1,8 +1,8 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use chrono::{Datelike, Local, NaiveDate};
+use chrono::{Datelike, Duration, Local, NaiveDate};
 use gtk4::gdk;
 use gtk4::glib;
 use gtk4::prelude::*;
@@ -54,6 +54,21 @@ window.waycal {
 }
 .waycal-root.rounded .waycal-day.today {
     border-radius: 8px;
+}
+.waycal-week {
+    color: #6a7a71;
+    font-size: 11px;
+    padding: 4px 6px;
+    min-width: 16px;
+}
+.waycal-week-header {
+    font-weight: bold;
+    padding-bottom: 6px;
+}
+.waycal-week-sep {
+    background: rgba(143, 188, 143, 0.18);
+    margin: 0 3px;
+    min-width: 1px;
 }
 .waycal-footer {
     color: #6a7a71;
@@ -118,6 +133,29 @@ fn save_rounded(rounded: bool) {
     }
 }
 
+fn weeks_state_path() -> Option<PathBuf> {
+    let base = std::env::var_os("XDG_STATE_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/state")))?;
+    Some(base.join("waycal").join("weeks"))
+}
+
+fn load_weeks() -> bool {
+    weeks_state_path()
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .map(|s| s.trim() != "off")
+        .unwrap_or(true)
+}
+
+fn save_weeks(show: bool) {
+    if let Some(path) = weeks_state_path() {
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::write(path, if show { "on" } else { "off" });
+    }
+}
+
 fn month_name(m: u32) -> &'static str {
     match m {
         1 => "January",
@@ -176,7 +214,7 @@ fn build_ui(app: &gtk4::Application) {
     grid.set_column_spacing(2);
     grid.set_halign(gtk4::Align::Center);
 
-    let footer = gtk4::Label::new(Some("\u{2190}\u{2192} mo   \u{2191}\u{2193} yr   \u{23CE} today   s style"));
+    let footer = gtk4::Label::new(Some("\u{2190}\u{2192} mo   \u{2191}\u{2193} yr   \u{23CE} today   s style   w weeks"));
     footer.add_css_class("waycal-footer");
     footer.set_halign(gtk4::Align::Center);
 
@@ -191,7 +229,8 @@ fn build_ui(app: &gtk4::Application) {
     window.set_child(Some(&root));
 
     let state = Rc::new(RefCell::new(ViewDate::today()));
-    render(&grid, &header, *state.borrow());
+    let show_weeks = Rc::new(Cell::new(load_weeks()));
+    render(&grid, &header, *state.borrow(), show_weeks.get());
 
     let key = gtk4::EventControllerKey::new();
     {
@@ -200,6 +239,7 @@ fn build_ui(app: &gtk4::Application) {
         let header = header.clone();
         let window = window.clone();
         let root = root.clone();
+        let show_weeks = show_weeks.clone();
         key.connect_key_pressed(move |_, keyval, _, _| {
             let current = *state.borrow();
             let next = match keyval {
@@ -222,10 +262,17 @@ fn build_ui(app: &gtk4::Application) {
                     save_rounded(now_rounded);
                     return glib::Propagation::Stop;
                 }
+                gdk::Key::w | gdk::Key::W => {
+                    let new_val = !show_weeks.get();
+                    show_weeks.set(new_val);
+                    save_weeks(new_val);
+                    render(&grid, &header, *state.borrow(), new_val);
+                    return glib::Propagation::Stop;
+                }
                 _ => return glib::Propagation::Proceed,
             };
             *state.borrow_mut() = next;
-            render(&grid, &header, next);
+            render(&grid, &header, next, show_weeks.get());
             glib::Propagation::Stop
         });
     }
@@ -234,18 +281,27 @@ fn build_ui(app: &gtk4::Application) {
     window.present();
 }
 
-fn render(grid: &gtk4::Grid, header: &gtk4::Label, v: ViewDate) {
+fn render(grid: &gtk4::Grid, header: &gtk4::Label, v: ViewDate, show_weeks: bool) {
     header.set_text(&format!("{} {}", month_name(v.month), v.year));
 
     while let Some(child) = grid.first_child() {
         grid.remove(&child);
     }
 
+    let day_col_offset: i32 = if show_weeks { 2 } else { 0 };
+
+    if show_weeks {
+        let lbl = gtk4::Label::new(Some("Wk"));
+        lbl.add_css_class("waycal-week");
+        lbl.add_css_class("waycal-week-header");
+        grid.attach(&lbl, 0, 0, 1, 1);
+    }
+
     let weekdays = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
     for (i, name) in weekdays.iter().enumerate() {
         let lbl = gtk4::Label::new(Some(name));
         lbl.add_css_class("waycal-weekday");
-        grid.attach(&lbl, i as i32, 0, 1, 1);
+        grid.attach(&lbl, i as i32 + day_col_offset, 0, 1, 1);
     }
 
     let first = NaiveDate::from_ymd_opt(v.year, v.month, 1).unwrap();
@@ -263,7 +319,7 @@ fn render(grid: &gtk4::Grid, header: &gtk4::Label, v: ViewDate) {
         let lbl = gtk4::Label::new(Some(&day.to_string()));
         lbl.add_css_class("waycal-day");
         lbl.add_css_class("dim");
-        grid.attach(&lbl, i, 1, 1, 1);
+        grid.attach(&lbl, i + day_col_offset, 1, 1, 1);
     }
 
     for d in 1..=days {
@@ -275,7 +331,7 @@ fn render(grid: &gtk4::Grid, header: &gtk4::Label, v: ViewDate) {
         if is_current && d == today_day {
             lbl.add_css_class("today");
         }
-        grid.attach(&lbl, col, row, 1, 1);
+        grid.attach(&lbl, col + day_col_offset, row, 1, 1);
     }
 
     let total = lead + days;
@@ -288,6 +344,22 @@ fn render(grid: &gtk4::Grid, header: &gtk4::Label, v: ViewDate) {
         let lbl = gtk4::Label::new(Some(&day.to_string()));
         lbl.add_css_class("waycal-day");
         lbl.add_css_class("dim");
-        grid.attach(&lbl, col, row, 1, 1);
+        grid.attach(&lbl, col + day_col_offset, row, 1, 1);
+    }
+
+    if show_weeks {
+        let grid_start = first - Duration::days(lead as i64);
+        let total_cells = lead + days + trailing;
+        let num_rows = total_cells / 7;
+        for row in 0..num_rows {
+            let monday = grid_start + Duration::days((row * 7) as i64);
+            let week = monday.iso_week().week();
+            let lbl = gtk4::Label::new(Some(&week.to_string()));
+            lbl.add_css_class("waycal-week");
+            grid.attach(&lbl, 0, row + 1, 1, 1);
+        }
+        let sep = gtk4::Separator::new(gtk4::Orientation::Vertical);
+        sep.add_css_class("waycal-week-sep");
+        grid.attach(&sep, 1, 0, 1, num_rows + 1);
     }
 }
