@@ -10,59 +10,103 @@ use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 
 const APP_ID: &str = "com.forrestknight.waycal";
 
-const CSS: &str = r#"
-window.waycal {
-    background: transparent;
+struct ThemeColors {
+    bg: String,
+    fg: String,
+    accent: String,
+    on_accent: String,
 }
-.waycal-root {
-    background-color: #1a2125;
-    border: 2px solid #8FBC8F;
+
+fn load_theme_colors() -> Option<ThemeColors> {
+    let base = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
+    let path = base.join("omarchy/current/theme/colors.toml");
+    let content = std::fs::read_to_string(path).ok()?;
+    let mut bg = None;
+    let mut fg = None;
+    let mut accent = None;
+    for line in content.lines() {
+        let Some((k, v)) = line.split_once('=') else { continue };
+        let key = k.trim();
+        let val = v.trim().trim_matches('"').to_string();
+        match key {
+            "background" => bg = Some(val),
+            "foreground" => fg = Some(val),
+            "accent" => accent = Some(val),
+            _ => {}
+        }
+    }
+    let bg = bg?;
+    Some(ThemeColors { on_accent: bg.clone(), bg, fg: fg?, accent: accent? })
+}
+
+fn build_css() -> String {
+    let (bg, fg, accent, on_accent) = match load_theme_colors() {
+        Some(c) => (c.bg, c.fg, c.accent, c.on_accent),
+        None => (
+            "@theme_bg_color".into(),
+            "@theme_fg_color".into(),
+            "@theme_selected_bg_color".into(),
+            "@theme_selected_fg_color".into(),
+        ),
+    };
+    format!(
+        r#"
+window.waycal {{
+    background: transparent;
+}}
+.waycal-root {{
+    background-color: {bg};
+    border: 2px solid {accent};
     border-radius: 0;
     padding: 14px 18px;
-    color: #c9d1d9;
+    color: {fg};
     font-family: "CaskaydiaMono Nerd Font", monospace;
     font-size: 13px;
     min-width: 260px;
-}
-.waycal-root.rounded {
-    background-color: rgba(26, 33, 37, 0.96);
+}}
+.waycal-root.rounded {{
+    background-color: alpha({bg}, 0.96);
     border: 2px solid transparent;
     border-radius: 16px;
-}
-.waycal-header {
+}}
+.waycal-header {{
     font-weight: bold;
     font-size: 15px;
     padding-bottom: 6px;
-}
-.waycal-weekday {
-    color: #8FBC8F;
+}}
+.waycal-weekday {{
+    color: {accent};
     font-weight: bold;
     padding: 2px 6px;
-}
-.waycal-day {
+}}
+.waycal-day {{
     padding: 4px 7px;
     min-width: 18px;
-}
-.waycal-day.dim {
+}}
+.waycal-day.dim {{
     opacity: 0.3;
-}
-.waycal-day.today {
-    background-color: #8FBC8F;
-    color: #1a2125;
+}}
+.waycal-day.today {{
+    background-color: {accent};
+    color: {on_accent};
     border-radius: 0;
     font-weight: bold;
-}
-.waycal-root.rounded .waycal-day.today {
+}}
+.waycal-root.rounded .waycal-day.today {{
     border-radius: 8px;
-}
-.waycal-footer {
-    color: #6a7a71;
+}}
+.waycal-footer {{
+    color: alpha({fg}, 0.55);
     font-size: 10px;
     padding-top: 8px;
     margin-top: 6px;
-    border-top: 1px solid rgba(143, 188, 143, 0.18);
+    border-top: 1px solid alpha({accent}, 0.25);
+}}
+"#
+    )
 }
-"#;
 
 #[derive(Clone, Copy)]
 struct ViewDate {
@@ -145,7 +189,7 @@ fn main() -> glib::ExitCode {
 
 fn load_css() {
     let provider = gtk4::CssProvider::new();
-    provider.load_from_string(CSS);
+    provider.load_from_string(&build_css());
     if let Some(display) = gdk::Display::default() {
         gtk4::style_context_add_provider_for_display(
             &display,
