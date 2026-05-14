@@ -9,6 +9,7 @@ use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 
 const APP_ID: &str = "com.forrestknight.waycal";
+const AUTO_CLOSE_DELAY: std::time::Duration = std::time::Duration::from_secs(2);
 
 const CSS: &str = r#"
 window.waycal {
@@ -73,7 +74,10 @@ struct ViewDate {
 impl ViewDate {
     fn today() -> Self {
         let now = Local::now().date_naive();
-        Self { year: now.year(), month: now.month() }
+        Self {
+            year: now.year(),
+            month: now.month(),
+        }
     }
 
     fn shift_month(self, delta: i32) -> Self {
@@ -84,7 +88,10 @@ impl ViewDate {
     }
 
     fn shift_year(self, delta: i32) -> Self {
-        Self { year: self.year + delta, month: self.month }
+        Self {
+            year: self.year + delta,
+            month: self.month,
+        }
     }
 }
 
@@ -144,6 +151,7 @@ fn build_ui(app: &gtk4::Application) {
     window.add_css_class("waycal");
 
     window.init_layer_shell();
+    window.set_namespace(Some("waycal"));
     window.set_layer(Layer::Top);
     window.set_keyboard_mode(KeyboardMode::OnDemand);
     window.set_anchor(Edge::Top, true);
@@ -158,7 +166,9 @@ fn build_ui(app: &gtk4::Application) {
     grid.set_column_spacing(2);
     grid.set_halign(gtk4::Align::Center);
 
-    let footer = gtk4::Label::new(Some("\u{2190}\u{2192} mo   \u{2191}\u{2193} yr   \u{23CE} today   s style"));
+    let footer = gtk4::Label::new(Some(
+        "\u{2190}\u{2192} mo   \u{2191}\u{2193} yr   \u{23CE} today   s style",
+    ));
     footer.add_css_class("waycal-footer");
     footer.set_halign(gtk4::Align::Center);
 
@@ -212,6 +222,64 @@ fn build_ui(app: &gtk4::Application) {
         });
     }
     window.add_controller(key);
+
+    let auto_close: Rc<RefCell<Option<glib::SourceId>>> = Rc::new(RefCell::new(None));
+
+    let motion = gtk4::EventControllerMotion::new();
+    {
+        let auto_close = auto_close.clone();
+        motion.connect_enter(move |_, _, _| {
+            if let Some(id) = auto_close.borrow_mut().take() {
+                id.remove();
+            }
+        });
+    }
+    {
+        let window = window.clone();
+        let auto_close = auto_close.clone();
+        motion.connect_leave(move |_| {
+            if let Some(id) = auto_close.borrow_mut().take() {
+                id.remove();
+            }
+            if !window.is_visible() {
+                return;
+            }
+            let window_inner = window.clone();
+            let auto_close_inner = auto_close.clone();
+            let id = glib::timeout_add_local(AUTO_CLOSE_DELAY, move || {
+                *auto_close_inner.borrow_mut() = None;
+                window_inner.close();
+                glib::ControlFlow::Break
+            });
+            *auto_close.borrow_mut() = Some(id);
+        });
+    }
+    window.add_controller(motion);
+
+    // Cancel any pending timer when the window is closed (ESC or otherwise)
+    // so a dangling timeout never calls close() on a destroyed window.
+    {
+        let auto_close = auto_close.clone();
+        window.connect_close_request(move |_| {
+            if let Some(id) = auto_close.borrow_mut().take() {
+                id.remove();
+            }
+            glib::Propagation::Proceed
+        });
+    }
+
+    // Start an initial timer for when the window opens with the pointer already
+    // outside it — motion.connect_leave won't fire in that case.
+    {
+        let window_inner = window.clone();
+        let auto_close_inner = auto_close.clone();
+        let id = glib::timeout_add_local(AUTO_CLOSE_DELAY, move || {
+            *auto_close_inner.borrow_mut() = None;
+            window_inner.close();
+            glib::ControlFlow::Break
+        });
+        *auto_close.borrow_mut() = Some(id);
+    }
 
     window.present();
 }
