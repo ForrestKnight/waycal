@@ -9,7 +9,7 @@ use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 
 const APP_ID: &str = "com.forrestknight.waycal";
-const AUTO_CLOSE_DELAY: std::time::Duration = std::time::Duration::from_secs(2);
+const AUTO_CLOSE_DELAY: std::time::Duration = std::time::Duration::from_secs(1);
 
 struct ThemeColors {
     bg: String,
