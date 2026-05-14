@@ -9,7 +9,6 @@ use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 
 const APP_ID: &str = "com.forrestknight.waycal";
-const AUTO_CLOSE_DELAY: std::time::Duration = std::time::Duration::from_secs(1);
 
 struct ThemeColors {
     bg: String,
@@ -191,7 +190,7 @@ fn load_css() {
 fn build_ui(app: &gtk4::Application) {
     let window = gtk4::ApplicationWindow::new(app);
     window.set_decorated(false);
-    window.set_resizable(false);
+    window.set_resizable(true);
     window.add_css_class("waycal");
 
     window.init_layer_shell();
@@ -199,6 +198,9 @@ fn build_ui(app: &gtk4::Application) {
     window.set_layer(Layer::Top);
     window.set_keyboard_mode(KeyboardMode::OnDemand);
     window.set_anchor(Edge::Top, true);
+    window.set_anchor(Edge::Bottom, true);
+    window.set_anchor(Edge::Left, true);
+    window.set_anchor(Edge::Right, true);
     window.set_margin(Edge::Top, 0);
 
     let header = gtk4::Label::new(None);
@@ -224,7 +226,17 @@ fn build_ui(app: &gtk4::Application) {
     root.append(&header);
     root.append(&grid);
     root.append(&footer);
-    window.set_child(Some(&root));
+
+    let backdrop = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    backdrop.add_css_class("waycal-backdrop");
+    backdrop.set_halign(gtk4::Align::Fill);
+    backdrop.set_valign(gtk4::Align::Fill);
+    backdrop.set_hexpand(true);
+    backdrop.set_vexpand(true);
+    root.set_halign(gtk4::Align::Center);
+    root.set_valign(gtk4::Align::Start);
+    backdrop.append(&root);
+    window.set_child(Some(&backdrop));
 
     let state = Rc::new(RefCell::new(ViewDate::today()));
     render(&grid, &header, *state.borrow());
@@ -267,63 +279,25 @@ fn build_ui(app: &gtk4::Application) {
     }
     window.add_controller(key);
 
-    let auto_close: Rc<RefCell<Option<glib::SourceId>>> = Rc::new(RefCell::new(None));
-
-    let motion = gtk4::EventControllerMotion::new();
+    let click = gtk4::GestureClick::new();
     {
-        let auto_close = auto_close.clone();
-        motion.connect_enter(move |_, _, _| {
-            if let Some(id) = auto_close.borrow_mut().take() {
-                id.remove();
-            }
-        });
-    }
-    {
+        let backdrop = backdrop.clone();
         let window = window.clone();
-        let auto_close = auto_close.clone();
-        motion.connect_leave(move |_| {
-            if let Some(id) = auto_close.borrow_mut().take() {
-                id.remove();
-            }
-            if !window.is_visible() {
+        let root = root.clone();
+        click.connect_pressed(move |_, _, x, y| {
+            let Some(bounds) = root.compute_bounds(&backdrop) else {
                 return;
+            };
+            let inside_calendar = x >= bounds.x() as f64
+                && x <= (bounds.x() + bounds.width()) as f64
+                && y >= bounds.y() as f64
+                && y <= (bounds.y() + bounds.height()) as f64;
+            if !inside_calendar {
+                window.close();
             }
-            let window_inner = window.clone();
-            let auto_close_inner = auto_close.clone();
-            let id = glib::timeout_add_local(AUTO_CLOSE_DELAY, move || {
-                *auto_close_inner.borrow_mut() = None;
-                window_inner.close();
-                glib::ControlFlow::Break
-            });
-            *auto_close.borrow_mut() = Some(id);
         });
     }
-    window.add_controller(motion);
-
-    // Cancel any pending timer when the window is closed (ESC or otherwise)
-    // so a dangling timeout never calls close() on a destroyed window.
-    {
-        let auto_close = auto_close.clone();
-        window.connect_close_request(move |_| {
-            if let Some(id) = auto_close.borrow_mut().take() {
-                id.remove();
-            }
-            glib::Propagation::Proceed
-        });
-    }
-
-    // Start an initial timer for when the window opens with the pointer already
-    // outside it — motion.connect_leave won't fire in that case.
-    {
-        let window_inner = window.clone();
-        let auto_close_inner = auto_close.clone();
-        let id = glib::timeout_add_local(AUTO_CLOSE_DELAY, move || {
-            *auto_close_inner.borrow_mut() = None;
-            window_inner.close();
-            glib::ControlFlow::Break
-        });
-        *auto_close.borrow_mut() = Some(id);
-    }
+    backdrop.add_controller(click);
 
     window.present();
 }
