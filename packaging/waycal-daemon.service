@@ -1,0 +1,13 @@
+[Unit]
+Description=waycal Google Calendar/Tasks notification daemon
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+# Adjust if waycal lives elsewhere (e.g. %h/.cargo/bin/waycal or %h/.local/bin/waycal)
+ExecStart=/usr/bin/waycal daemon
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=graphical-session.target
