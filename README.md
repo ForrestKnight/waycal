@@ -14,6 +14,7 @@ Written in Rust with GTK4 and `gtk4-layer-shell` so the popup anchors itself to 
 
 - **Month view** with today highlighted, leading/trailing days dimmed
 - **Keyboard nav:** `←`/`→` month, `↑`/`↓` year, `Enter` today, `s` toggle style, `Esc` close
+- **Click-to-close:** clicking anywhere closes the popup
 - **Two looks:** press `s` to swap between a sharp-cornered, bordered "Omarchy" style and a soft rounded style. Your choice is remembered between launches
 - **Toggle-click:** clicking the Waybar icon while the popup is open closes it
 - **Anchored** just below the bar, horizontally centered, no config file hacks
@@ -113,6 +114,8 @@ Restart Waybar (`pkill -x waybar && setsid waybar &`) and click the icon.
 | `Enter`      | Jump back to today                         |
 | `s`          | Toggle sharp / rounded style (persisted)   |
 | `Esc`        | Close the popup                            |
+
+Clicking anywhere also closes the popup.
 
 Clicking the Waybar icon a second time also closes the popup (the `pkill -x waycal || waycal` command toggles).
 

@@ -27,7 +27,9 @@ fn load_theme_colors() -> Option<ThemeColors> {
     let mut fg = None;
     let mut accent = None;
     for line in content.lines() {
-        let Some((k, v)) = line.split_once('=') else { continue };
+        let Some((k, v)) = line.split_once('=') else {
+            continue;
+        };
         let key = k.trim();
         let val = v.trim().trim_matches('"').to_string();
         match key {
@@ -38,7 +40,12 @@ fn load_theme_colors() -> Option<ThemeColors> {
         }
     }
     let bg = bg?;
-    Some(ThemeColors { on_accent: bg.clone(), bg, fg: fg?, accent: accent? })
+    Some(ThemeColors {
+        on_accent: bg.clone(),
+        bg,
+        fg: fg?,
+        accent: accent?,
+    })
 }
 
 fn build_css() -> String {
@@ -281,20 +288,9 @@ fn build_ui(app: &gtk4::Application) {
 
     let click = gtk4::GestureClick::new();
     {
-        let backdrop = backdrop.clone();
         let window = window.clone();
-        let root = root.clone();
-        click.connect_pressed(move |_, _, x, y| {
-            let Some(bounds) = root.compute_bounds(&backdrop) else {
-                return;
-            };
-            let inside_calendar = x >= bounds.x() as f64
-                && x <= (bounds.x() + bounds.width()) as f64
-                && y >= bounds.y() as f64
-                && y <= (bounds.y() + bounds.height()) as f64;
-            if !inside_calendar {
-                window.close();
-            }
+        click.connect_pressed(move |_, _, _, _| {
+            window.close();
         });
     }
     backdrop.add_controller(click);
