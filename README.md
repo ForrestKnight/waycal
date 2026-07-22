@@ -13,6 +13,11 @@ Written in Rust with GTK4 and `gtk4-layer-shell` so the popup anchors itself to 
 ## Features
 
 - **Month view** with today highlighted, leading/trailing days dimmed
+- **Google Calendar & Tasks** (optional): agenda and task panel for multiple
+  accounts via the [`gws` CLI](https://github.com/googleworkspace/cli) —
+  create/edit/delete events and tasks, complete tasks, join Meet links, plus a
+  notification daemon for reminders and a daily due-task digest. See
+  [Google Calendar & Tasks integration](#google-calendar--tasks-integration)
 - **Keyboard nav:** `←`/`→` month, `↑`/`↓` year, `Enter` today, `s` toggle style, `Esc` close
 - **Two looks:** press `s` to swap between a sharp-cornered, bordered "Omarchy" style and a soft rounded style. Your choice is remembered between launches
 - **Toggle-click:** clicking the Waybar icon while the popup is open closes it
@@ -106,15 +111,105 @@ Restart Waybar (`pkill -x waybar && setsid waybar &`) and click the icon.
 
 ## Controls
 
+Without a config file (plain calendar):
+
 | Key          | Action                                     |
 | ------------ | ------------------------------------------ |
 | `←` / `→`    | Previous / next month                      |
 | `↑` / `↓`    | Previous / next year                       |
 | `Enter`      | Jump back to today                         |
 | `s`          | Toggle sharp / rounded style (persisted)   |
-| `Esc`        | Close the popup                            |
+| `Esc` / `q`  | Close the popup                            |
+
+With Google accounts configured (see below), arrow keys move the day selection instead:
+
+| Key                | Action                                    |
+| ------------------ | ----------------------------------------- |
+| `←` / `→`          | Previous / next day                       |
+| `↑` / `↓`          | Previous / next week                      |
+| `PgUp` / `PgDn`    | Previous / next month (`Shift`: year)     |
+| `Enter`            | Jump back to today                        |
+| `n` / `t`          | New event / new task                      |
+| `r`                | Refresh from Google                       |
+| `s`                | Toggle sharp / rounded style (persisted)  |
+| `Esc` / `q`        | Back / close the popup (`q` not in forms) |
 
 Clicking the Waybar icon a second time also closes the popup (the `pkill -x waycal || waycal` command toggles).
+
+## Google Calendar & Tasks integration
+
+waycal can show — and edit — events and tasks from one or more Google accounts
+through the [`gws` CLI](https://github.com/googleworkspace/cli). With accounts
+configured, the popup grows a side panel: the selected day's agenda (with
+join-Meet buttons) on top, pending tasks below, and buttons/keys to create,
+edit, delete and complete items. Days with events get a small underline in the
+month grid, and each account gets its own accent color.
+
+Setup:
+
+1. Install `gws` and authenticate each account once, e.g.:
+
+   ```sh
+   export GOOGLE_WORKSPACE_CLI_CLIENT_ID=""
+   export GOOGLE_WORKSPACE_CLI_CLIENT_SECRET="
+   gws auth login --services tasks,calendar --scopes https://www.googleapis.com/auth/tasks,https://www.googleapis.com/auth/calendar
+   gws auth export --unmasked > ~/.config/gws-conf/work-credentials.json
+   ```
+
+2. Create `~/.config/waycal/config.toml`:
+
+   ```toml
+   poll_interval_secs = 300        # daemon poll interval
+   default_reminder_mins = 10      # fallback when an event has no reminders
+   task_digest_time = "09:00"      # daily due-tasks notification; omit to disable
+   hide_event_types = ["workingLocation", "birthday"]
+
+   [[accounts]]
+   name = "personal"
+   config_dir = "~/.config/gws-personal"
+   credentials_file = "~/.config/gws-conf/personal-credentials.json"
+   color = "#8FBC8F"
+
+   [[accounts]]
+   name = "work"
+   config_dir = "~/.config/gws-work"
+   credentials_file = "~/.config/gws-conf/work-credentials.json"
+   color = "#7aa2f7"
+   ```
+
+   `config_dir` and `credentials_file` map to gws' `GOOGLE_WORKSPACE_CLI_CONFIG_DIR`
+   and `GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE` environment variables — one pair per
+   account. Without this file, waycal behaves exactly like the plain calendar above.
+
+The popup paints instantly from a local cache (`~/.cache/waycal/`) and refreshes
+in the background. `waycal dump` prints everything it would fetch, for debugging.
+
+### Notifications
+
+`waycal daemon` is a headless process that polls your accounts and sends
+desktop notifications (via `notify-send`) for:
+
+- **Event reminders**, honoring each event's own reminders and each calendar's
+  default popup reminders, with `default_reminder_mins` as the fallback. The
+  notification body includes the Meet link when there is one.
+- **A daily digest** of tasks due (or overdue) today, at `task_digest_time`.
+
+Start it with your session — either Hyprland:
+
+```
+exec-once = waycal daemon
+```
+
+or the bundled systemd user unit:
+
+```sh
+cp packaging/waycal-daemon.service ~/.config/systemd/user/
+systemctl --user enable --now waycal-daemon.service
+```
+
+(Edit `ExecStart` if your binary isn't at `/usr/bin/waycal`.) Notification
+dedup state lives in `~/.local/state/waycal/`, so restarting the daemon never
+re-fires old reminders.
 
 ## Why not just use the Waybar clock tooltip?
 
