@@ -68,6 +68,14 @@ cargo build --release
 install -Dm755 target/release/waycal ~/.local/bin/waycal
 ```
 
+## CLI options
+
+- `--position <value>` — where the popup anchors on screen. One of `top-left`, `top` (default), `top-right`, `left`, `center`, `right`, `bottom-left`, `bottom`, `bottom-right`. An unrecognized value prints a warning and falls back to `top`.
+
+```sh
+waycal --position bottom-right
+```
+
 ## Waybar integration
 
 Add a custom module to your `~/.config/waybar/config.jsonc`:
