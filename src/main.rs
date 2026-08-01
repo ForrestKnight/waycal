@@ -1,3 +1,5 @@
+mod cli;
+
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -6,7 +8,9 @@ use chrono::{Datelike, Local, NaiveDate};
 use gtk4::gdk;
 use gtk4::glib;
 use gtk4::prelude::*;
-use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
+use gtk4_layer_shell::{KeyboardMode, Layer, LayerShell};
+
+use cli::Position;
 
 const APP_ID: &str = "com.forrestknight.waycal";
 
@@ -138,8 +142,9 @@ fn month_name(m: u32) -> &'static str {
 
 fn main() -> glib::ExitCode {
     let app = gtk4::Application::builder().application_id(APP_ID).build();
+    let position = cli::install(&app);
     app.connect_startup(|_| load_css());
-    app.connect_activate(build_ui);
+    app.connect_activate(move |app| build_ui(app, position.get()));
     app.run()
 }
 
@@ -155,7 +160,7 @@ fn load_css() {
     }
 }
 
-fn build_ui(app: &gtk4::Application) {
+fn build_ui(app: &gtk4::Application, position: Position) {
     let window = gtk4::ApplicationWindow::new(app);
     window.set_decorated(false);
     window.set_resizable(false);
@@ -163,9 +168,11 @@ fn build_ui(app: &gtk4::Application) {
 
     window.init_layer_shell();
     window.set_layer(Layer::Top);
-    window.set_keyboard_mode(KeyboardMode::OnDemand);
-    window.set_anchor(Edge::Top, true);
-    window.set_margin(Edge::Top, 0);
+    window.set_keyboard_mode(KeyboardMode::Exclusive);
+    for (edge, anchored) in position.anchors() {
+        window.set_anchor(edge, anchored);
+        window.set_margin(edge, position.margin(edge));
+    }
 
     let header = gtk4::Label::new(None);
     header.add_css_class("waycal-header");
