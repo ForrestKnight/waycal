@@ -1,3 +1,6 @@
+mod cli;
+
+use clap::Parser;
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -137,10 +140,13 @@ fn month_name(m: u32) -> &'static str {
 }
 
 fn main() -> glib::ExitCode {
+    let cli_args = cli::Cli::parse();
+
     let app = gtk4::Application::builder().application_id(APP_ID).build();
     app.connect_startup(|_| load_css());
-    app.connect_activate(build_ui);
-    app.run()
+    app.connect_activate(move |app| build_ui(app, cli_args.clone()));
+    
+    app.run_with_args(&[] as &[&str])
 }
 
 fn load_css() {
@@ -155,7 +161,7 @@ fn load_css() {
     }
 }
 
-fn build_ui(app: &gtk4::Application) {
+fn build_ui(app: &gtk4::Application, cli_args: cli::Cli) {
     let window = gtk4::ApplicationWindow::new(app);
     window.set_decorated(false);
     window.set_resizable(false);
@@ -164,8 +170,23 @@ fn build_ui(app: &gtk4::Application) {
     window.init_layer_shell();
     window.set_layer(Layer::Top);
     window.set_keyboard_mode(KeyboardMode::OnDemand);
-    window.set_anchor(Edge::Top, true);
-    window.set_margin(Edge::Top, 0);
+    
+    match cli_args.position {
+        cli::Position::Top => {
+            window.set_anchor(Edge::Top, true);
+            window.set_margin(Edge::Top, 0);
+        }
+        cli::Position::Bottom => {
+            window.set_anchor(Edge::Bottom, true);
+            window.set_margin(Edge::Bottom, 0);
+        }
+        cli::Position::Coordinates(x, y) => {
+            window.set_anchor(Edge::Top, true);
+            window.set_anchor(Edge::Left, true);
+            window.set_margin(Edge::Top, y);
+            window.set_margin(Edge::Left, x);
+        }
+    }
 
     let header = gtk4::Label::new(None);
     header.add_css_class("waycal-header");
