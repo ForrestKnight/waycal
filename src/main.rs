@@ -256,18 +256,28 @@ fn build_ui(app: &gtk4::Application, cli_args: cli::Cli) {
     {
         let state = state.clone();
         let grid = grid.clone();
-        let header = header.clone();
+        let scroll_accum = Rc::new(RefCell::new(0.0f64));
         scroll.connect_scroll(move |_, _dx, dy| {
-            let current = *state.borrow();
-            let next = if dy > 0.0 {
-                current.shift_month(1)
-            } else if dy < 0.0 {
-                current.shift_month(-1)
+            let mut accum = *scroll_accum.borrow() + dy;
+            let shifts = if accum >= 1.0 {
+                let s = accum.floor() as i32;
+                accum -= accum.floor();
+                s
+            } else if accum <= -1.0 {
+                let s = accum.ceil() as i32;
+                accum -= accum.ceil();
+                s
             } else {
-                current
+                0
             };
-            *state.borrow_mut() = next;
-            render(&grid, &header, next);
+            *scroll_accum.borrow_mut() = accum;
+
+            if shifts != 0 {
+                let current = *state.borrow();
+                let next = current.shift_month(shifts);
+                *state.borrow_mut() = next;
+                render(&grid, &header, next);
+            }
             glib::Propagation::Stop
         });
     }
