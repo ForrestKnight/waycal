@@ -1,6 +1,6 @@
 [package]
 name = "waycal"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 description = "A tiny Waybar calendar popup for wlr-layer-shell compositors"
 license = "MIT"
@@ -11,6 +11,7 @@ readme = "README.md"
 gtk4 = { version = "0.9", features = ["v4_12"] }
 gtk4-layer-shell = "0.5"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
+clap = { version = "4.6.6", features = ["derive"] }
 
 [profile.release]
 lto = true
