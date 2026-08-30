@@ -252,6 +252,27 @@ fn build_ui(app: &gtk4::Application, cli_args: cli::Cli) {
     }
     window.add_controller(key);
 
+    let scroll = gtk4::EventControllerScroll::new(gtk4::EventControllerScrollFlags::VERTICAL);
+    {
+        let state = state.clone();
+        let grid = grid.clone();
+        let header = header.clone();
+        scroll.connect_scroll(move |_, _dx, dy| {
+            let current = *state.borrow();
+            let next = if dy > 0.0 {
+                current.shift_month(1)
+            } else if dy < 0.0 {
+                current.shift_month(-1)
+            } else {
+                current
+            };
+            *state.borrow_mut() = next;
+            render(&grid, &header, next);
+            glib::Propagation::Stop
+        });
+    }
+    window.add_controller(scroll);
+
     window.present();
 }
 
