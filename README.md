@@ -14,7 +14,7 @@ Written in Rust with GTK4 and `gtk4-layer-shell` so the popup anchors itself to 
 
 - **Month view** with today highlighted, leading/trailing days dimmed
 - **Keyboard nav:** `←`/`→` month, `↑`/`↓` year, `Enter` today, `s` toggle style, `Esc` close
-- **Two looks:** press `s` to swap between a sharp-cornered, bordered "Omarchy" style and a soft rounded style. Your choice is remembered between launches
+- **Two looks:** press `s` to swap between a sharp-cornered, bordered style and a soft rounded style. Your choice is remembered between launches
 - **Toggle-click:** clicking the Waybar icon while the popup is open closes it
 - **Anchored** just below the bar, horizontally centered, no config file hacks
 - **Dark theme** with a sage-green accent, monospace font. Self-contained CSS — no theme integration or external dependencies to worry about.
@@ -27,13 +27,13 @@ waycal is a small native app, not a Waybar plugin. It runs on any Linux desktop 
   — Hyprland, Sway, river, Wayfire, Hikari, LabWC, etc. (not GNOME or KDE — those don't implement layer-shell)
 - **Waybar** (for the click-to-launch integration)
 - **GTK4** and **gtk4-layer-shell** shared libraries (already pulled in by most of the above compositors' package sets)
-- A **Nerd Font** installed as a system font, so the Waybar icon glyph renders. CaskaydiaMono Nerd Font is the default in Omarchy and works out of the box.
+- A **Nerd Font** installed as a system font, so the Waybar icon glyph renders. Any of them works, e.g. CaskaydiaMono Nerd Font.
 
 It is distribution-agnostic. The instructions below use `cargo`, which works on Arch, Fedora, Debian/Ubuntu, NixOS, etc.
 
 ## Install
 
-### Arch / Omarchy (AUR)
+### Arch (AUR)
 
 ```sh
 yay -S waycal
@@ -51,7 +51,7 @@ This pulls the latest release from [crates.io](https://crates.io/crates/waycal),
 
 | Distro             | Install command                                                                   |
 | ------------------ | --------------------------------------------------------------------------------- |
-| Arch / Omarchy     | `sudo pacman -S --needed gtk4 gtk4-layer-shell pkgconf`                           |
+| Arch               | `sudo pacman -S --needed gtk4 gtk4-layer-shell pkgconf`                           |
 | Fedora             | `sudo dnf install gtk4-devel gtk4-layer-shell-devel pkgconf`                      |
 | Debian / Ubuntu    | `sudo apt install libgtk-4-dev libgtk4-layer-shell-dev pkg-config`                |
 
