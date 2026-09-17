@@ -116,6 +116,16 @@ Restart Waybar (`pkill -x waybar && setsid waybar &`) and click the icon.
 
 Clicking the Waybar icon a second time also closes the popup (the `pkill -x waycal || waycal` command toggles).
 
+## First day of the week
+
+The week starts on whatever day your `LC_TIME` locale says it does (Sunday for `en_US`, Monday for most of Europe). To override it, pass `--week-start` in the Waybar `on-click` command:
+
+```sh
+waycal --week-start monday
+```
+
+Any day name or unambiguous prefix works (`monday`, `mon`, `su`).
+
 ## Why not just use the Waybar clock tooltip?
 
 The built-in `clock` tooltip shows a calendar, but it's an HTML label tooltip — not focusable, not keyboard-navigable, and shares the clock module's click action. waycal is a real window you can interact with, and leaves your clock's click behavior untouched.

@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -136,10 +136,89 @@ fn month_name(m: u32) -> &'static str {
     }
 }
 
+const WEEKDAYS: [&str; 7] = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+
+/// Parses a `--week-start` value into days from Monday (0 = Mon, 6 = Sun).
+fn parse_week_start(s: &str) -> Option<u32> {
+    let s = s.to_ascii_lowercase();
+    if s.len() < 2 {
+        return None;
+    }
+    ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+        .iter()
+        .position(|day| day.starts_with(&s))
+        .map(|i| i as u32)
+}
+
+/// First day of the week from the LC_TIME locale, as days from Monday.
+/// glibc only; anywhere else the week starts on Monday.
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn locale_week_start() -> u32 {
+    use std::ffi::{c_char, c_int};
+
+    // <langinfo.h> items the libc crate doesn't expose.
+    const NL_TIME_WEEK_1STDAY: c_int = 0x20066;
+    const NL_TIME_FIRST_WEEKDAY: c_int = 0x20068;
+
+    unsafe extern "C" {
+        fn nl_langinfo(item: c_int) -> *const c_char;
+    }
+
+    // first_weekday counts from 1, relative to week-1stday, which glibc
+    // hands back as a date packed into the pointer: 19971130 is a Sunday,
+    // 19971201 a Monday.
+    let (origin, first) = unsafe {
+        let first = nl_langinfo(NL_TIME_FIRST_WEEKDAY);
+        if first.is_null() {
+            return 0;
+        }
+        (nl_langinfo(NL_TIME_WEEK_1STDAY) as usize, *first as u8 as u32)
+    };
+    if !(1..=7).contains(&first) {
+        return 0;
+    }
+    let origin_from_monday = if origin == 19971201 { 0 } else { 6 };
+    (origin_from_monday + first - 1) % 7
+}
+
+#[cfg(not(all(target_os = "linux", target_env = "gnu")))]
+fn locale_week_start() -> u32 {
+    0
+}
+
 fn main() -> glib::ExitCode {
     let app = gtk4::Application::builder().application_id(APP_ID).build();
+    app.add_main_option(
+        "week-start",
+        glib::Char::from(0u8),
+        glib::OptionFlags::NONE,
+        glib::OptionArg::String,
+        "First day of the week, e.g. monday or sun (default: from locale)",
+        Some("DAY"),
+    );
+
+    let week_start = Rc::new(Cell::new(None));
+    {
+        let week_start = week_start.clone();
+        app.connect_handle_local_options(move |_, options| {
+            if let Some(value) = options.lookup::<String>("week-start").ok().flatten() {
+                match parse_week_start(&value) {
+                    Some(day) => week_start.set(Some(day)),
+                    None => {
+                        eprintln!("waycal: invalid --week-start '{value}', expected a day name like monday or sun");
+                        return 1;
+                    }
+                }
+            }
+            -1
+        });
+    }
+
     app.connect_startup(|_| load_css());
-    app.connect_activate(build_ui);
+    // Read the locale here rather than up front: GTK calls setlocale() during startup.
+    app.connect_activate(move |app| {
+        build_ui(app, week_start.get().unwrap_or_else(locale_week_start))
+    });
     app.run()
 }
 
@@ -155,7 +234,7 @@ fn load_css() {
     }
 }
 
-fn build_ui(app: &gtk4::Application) {
+fn build_ui(app: &gtk4::Application, week_start: u32) {
     let window = gtk4::ApplicationWindow::new(app);
     window.set_decorated(false);
     window.set_resizable(false);
@@ -192,7 +271,7 @@ fn build_ui(app: &gtk4::Application) {
     window.set_child(Some(&root));
 
     let state = Rc::new(RefCell::new(ViewDate::today()));
-    render(&grid, &header, *state.borrow());
+    render(&grid, &header, *state.borrow(), week_start);
 
     let key = gtk4::EventControllerKey::new();
     {
@@ -226,7 +305,7 @@ fn build_ui(app: &gtk4::Application) {
                 _ => return glib::Propagation::Proceed,
             };
             *state.borrow_mut() = next;
-            render(&grid, &header, next);
+            render(&grid, &header, next, week_start);
             glib::Propagation::Stop
         });
     }
@@ -235,22 +314,21 @@ fn build_ui(app: &gtk4::Application) {
     window.present();
 }
 
-fn render(grid: &gtk4::Grid, header: &gtk4::Label, v: ViewDate) {
+fn render(grid: &gtk4::Grid, header: &gtk4::Label, v: ViewDate, week_start: u32) {
     header.set_text(&format!("{} {}", month_name(v.month), v.year));
 
     while let Some(child) = grid.first_child() {
         grid.remove(&child);
     }
 
-    let weekdays = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
-    for (i, name) in weekdays.iter().enumerate() {
-        let lbl = gtk4::Label::new(Some(name));
+    for i in 0..7 {
+        let lbl = gtk4::Label::new(Some(WEEKDAYS[((i + week_start) % 7) as usize]));
         lbl.add_css_class("waycal-weekday");
         grid.attach(&lbl, i as i32, 0, 1, 1);
     }
 
     let first = NaiveDate::from_ymd_opt(v.year, v.month, 1).unwrap();
-    let lead = first.weekday().num_days_from_monday() as i32;
+    let lead = ((first.weekday().num_days_from_monday() + 7 - week_start) % 7) as i32;
     let days = days_in_month(v.year, v.month) as i32;
 
     let today = Local::now().date_naive();
