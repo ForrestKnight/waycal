@@ -224,7 +224,16 @@ fn main() -> glib::ExitCode {
 
 fn load_css() {
     let provider = gtk4::CssProvider::new();
-    provider.load_from_string(CSS);
+
+    let css = if let Ok(home) = std::env::var("HOME") {
+        let path = PathBuf::from(home).join(".config/waycal/style.css");
+        std::fs::read_to_string(path).unwrap_or_else(|_| CSS.to_string())
+    } else {
+        CSS.to_string()
+    };
+
+    provider.load_from_string(&css);
+
     if let Some(display) = gdk::Display::default() {
         gtk4::style_context_add_provider_for_display(
             &display,
